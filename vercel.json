@@ -6,11 +6,5 @@
       "source": "/",
       "destination": "/api/audit"
     }
-  ],
-  "functions": {
-    "api/audit.js": {
-      "maxDuration": 15,
-      "memory": 512
-    }
-  }
+  ]
 }

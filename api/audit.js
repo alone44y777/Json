@@ -1,23 +1,19 @@
-// NexGen Tech Zone || Dark Empire - JS Security & Architecture Auditor API
-// Pure Node.js 20+ Native ESM (Zero External Dependencies - Fast Vercel Execution)
-
 const BRANDING = {
   developer: "NexGen Tech Zone || Dark Empire",
-  owner: "Sardar Daud Arain"
+  owner: "Sardar Daud Arain",
   website: "https://nexgen-tech-pk.vercel.app"
 };
 
 const USER_AGENT =
   "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36";
 
-// Safe Secret Patterns (Always Masked in Output)
 const SECRET_PATTERNS = [
   { name: "Google / Firebase API Key", regex: /\bAIza[0-9A-Za-z\-_]{35}\b/g, severity: "MEDIUM" },
   { name: "AWS Access Key ID", regex: /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, severity: "HIGH" },
   { name: "Stripe Live Secret Key", regex: /\bsk_live_[0-9a-zA-Z]{24,}\b/g, severity: "CRITICAL" },
   { name: "Stripe Publishable Key", regex: /\bpk_live_[0-9a-zA-Z]{24,}\b/g, severity: "LOW" },
   { name: "GitHub Personal Token", regex: /\bgh[pousr]_[A-Za-z0-9_]{36,}\b/g, severity: "CRITICAL" },
-  { name: "Supabase Service/Anon JWT", regex: /\beyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\b/g, severity: "MEDIUM" },
+  { name: "Supabase / JWT Token", regex: /\beyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\b/g, severity: "MEDIUM" },
   { name: "OpenAI / Bearer Token", regex: /\bsk-[A-Za-z0-9]{32,}\b/g, severity: "HIGH" },
   { name: "Firebase Database URL", regex: /https:\/\/[a-z0-9-]+\.firebaseio\.com/gi, severity: "LOW" },
   { name: "Supabase Project URL", regex: /https:\/\/[a-z0-9]+\.supabase\.co/gi, severity: "LOW" }
@@ -25,12 +21,12 @@ const SECRET_PATTERNS = [
 
 function maskSecret(str) {
   if (!str || str.length <= 10) return "****";
-  if (str.startsWith("http")) return str; // Public project URLs remain readable
+  if (str.startsWith("http")) return str;
   return `${str.slice(0, 6)}****${str.slice(-4)}`;
 }
 
 function escapeXml(unsafe) {
-  return String(unsafe)
+  return String(unsafe || "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -39,7 +35,7 @@ function escapeXml(unsafe) {
 }
 
 function normalizeTargetUrl(rawUrl) {
-  let clean = rawUrl.trim();
+  let clean = String(rawUrl || "").trim();
   if (!/^https?:\/\//i.test(clean)) {
     clean = `https://${clean}`;
   }
@@ -47,7 +43,6 @@ function normalizeTargetUrl(rawUrl) {
   if (!["http:", "https:"].includes(parsed.protocol)) {
     throw new Error("Only HTTP and HTTPS URLs are supported.");
   }
-  // Block localhost / private IP ranges
   const host = parsed.hostname.toLowerCase();
   if (
     host === "localhost" ||
@@ -122,8 +117,8 @@ function extractInlineScripts(html) {
 }
 
 function analyzeContent(codeText, baseOrigin, fileName, state) {
-  // 1. Secret & Config Audit
   for (const rule of SECRET_PATTERNS) {
+    rule.regex.lastIndex = 0;
     const matches = codeText.match(rule.regex);
     if (matches) {
       const uniqueMatches = [...new Set(matches)];
@@ -143,19 +138,16 @@ function analyzeContent(codeText, baseOrigin, fileName, state) {
     }
   }
 
-  // 2. Source Map Reference Detection
   const mapMatch = codeText.match(/\/\/[#@]\s*sourceMappingURL=([^\s'"]+\.map)/i);
   if (mapMatch) {
     const fullMapUrl = resolveFullUrl(baseOrigin, mapMatch[1]);
     if (fullMapUrl) state.candidateSourceMaps.add(fullMapUrl);
   }
 
-  // 3. Relative Path Extraction (/api/..., /v1/..., /dashboard, etc.)
   const relPathRegex = /["'`](\/[a-zA-Z0-9_\-\/\.]{2,120})["'`]/g;
   let pMatch;
   while ((pMatch = relPathRegex.exec(codeText)) !== null) {
     const path = pMatch[1];
-    // Skip static media/font noise
     if (/\.(png|jpg|jpeg|gif|svg|webp|ico|woff2?|ttf|eot|css|mp4|mp3)$/i.test(path)) continue;
     if (path.startsWith("//")) continue;
 
@@ -169,7 +161,6 @@ function analyzeContent(codeText, baseOrigin, fileName, state) {
     }
   }
 
-  // 4. Full External / Internal API URL Extraction
   const fullUrlRegex = /["'`](https?:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[a-zA-Z0-9_\-\/\.\?\=\&]*)?)["'`]/g;
   let uMatch;
   while ((uMatch = fullUrlRegex.exec(codeText)) !== null) {
@@ -205,15 +196,15 @@ function calculateSecuritySummary(data) {
 
   if (criticalCount > 0) {
     score -= criticalCount * 35;
-    fixes.push("CRITICAL: Remove live secret keys (Stripe/GitHub) from frontend JS immediately and rotate them.");
+    fixes.push("CRITICAL: Remove live secret keys from frontend JS immediately and rotate them.");
   }
   if (highCount > 0) {
     score -= highCount * 25;
-    fixes.push("HIGH: Move private API keys (AWS/OpenAI) to server-side environment variables (.env).");
+    fixes.push("HIGH: Move private API keys to server-side environment variables (.env).");
   }
   if (mediumCount > 0) {
     score -= mediumCount * 10;
-    fixes.push("MEDIUM: Restrict public Firebase/Supabase/Google API keys using HTTP referrer & RLS security rules.");
+    fixes.push("MEDIUM: Restrict public Firebase/Supabase/Google API keys using HTTP referrer & RLS rules.");
   }
   if (data.source_maps.exposed) {
     score -= 15;
@@ -239,7 +230,7 @@ function calculateSecuritySummary(data) {
   else if (score < 96) grade = "A";
 
   if (fixes.length === 0) {
-    fixes.push("Great job! No exposed private secrets or public source maps detected in scanned JS bundles.");
+    fixes.push("No exposed private secrets or public source maps detected in scanned JS bundles.");
   }
 
   return { score, grade, fixes };
@@ -266,7 +257,7 @@ function generateFlowchartSvg(report) {
     escapeXml(txt.length > maxLen ? `${txt.slice(0, maxLen - 3)}...` : txt);
 
   const renderRows = (items, startX, startY, color) => {
-    if (items.length === 0) {
+    if (!items || items.length === 0) {
       return `<text x="${startX}" y="${startY}" fill="#64748b" font-family="monospace" font-size="12">No public endpoints found</text>`;
     }
     return items
@@ -289,48 +280,40 @@ function generateFlowchartSvg(report) {
     </linearGradient>
   </defs>
 
-  <!-- Background -->
   <rect width="1200" height="680" fill="#050a0e"/>
   <rect width="1200" height="680" fill="url(#grid)"/>
   <rect x="14" y="14" width="1172" height="652" rx="14" fill="none" stroke="#10b981" stroke-width="2"/>
 
-  <!-- Top Header -->
   <rect x="34" y="30" width="1132" height="58" rx="10" fill="url(#headerGrad)" stroke="#10b981" stroke-width="1.5"/>
   <text x="54" y="56" fill="#34d399" font-family="monospace" font-size="18" font-weight="bold">JS SECRET, ROUTE &amp; ARCHITECTURE FLOWCHART</text>
   <text x="54" y="76" fill="#a7f3d0" font-family="monospace" font-size="12">LIVE TARGET SCANNER // ZERO-TRUST STATIC BUNDLE AUDIT</text>
   <text x="1146" y="64" text-anchor="end" fill="#10b981" font-family="monospace" font-size="14" font-weight="bold">GRADE: ${escapeXml(report.security_summary.grade)} (${report.security_summary.score}/100)</text>
 
-  <!-- Root Target Node -->
   <rect x="370" y="112" width="460" height="54" rx="10" fill="#0b161d" stroke="#38bdf8" stroke-width="2"/>
   <text x="600" y="135" text-anchor="middle" fill="#38bdf8" font-family="monospace" font-size="12" font-weight="bold">TARGET ROOT DOMAIN</text>
   <text x="600" y="155" text-anchor="middle" fill="#f8fafc" font-family="monospace" font-size="14">${formatLine(report.target, 48)}</text>
 
-  <!-- Connector Lines -->
   <path d="M 600 166 L 600 198" stroke="#10b981" stroke-width="2"/>
   <path d="M 215 198 L 985 198" stroke="#10b981" stroke-width="2"/>
   <path d="M 215 198 L 215 226" stroke="#38bdf8" stroke-width="2"/>
   <path d="M 600 198 L 600 226" stroke="#10b981" stroke-width="2"/>
   <path d="M 985 198 L 985 226" stroke="#f59e0b" stroke-width="2"/>
 
-  <!-- Column 1: Frontend Routes -->
   <rect x="34" y="226" width="362" height="360" rx="12" fill="#09131a" stroke="#38bdf8" stroke-width="1.8"/>
   <rect x="34" y="226" width="362" height="42" rx="12" fill="#0c2436"/>
   <text x="215" y="252" text-anchor="middle" fill="#38bdf8" font-family="monospace" font-size="14" font-weight="bold">1. FRONTEND ROUTES (${report.frontend_routes.length})</text>
   ${renderRows(feList, 50, 296, "#bae6fd")}
 
-  <!-- Column 2: Backend APIs -->
   <rect x="419" y="226" width="362" height="360" rx="12" fill="#091613" stroke="#10b981" stroke-width="1.8"/>
   <rect x="419" y="226" width="362" height="42" rx="12" fill="#063326"/>
   <text x="600" y="252" text-anchor="middle" fill="#34d399" font-family="monospace" font-size="14" font-weight="bold">2. BACKEND APIs (${report.backend_apis.internal.length + report.backend_apis.external.length})</text>
   ${renderRows(beList, 435, 296, "#a7f3d0")}
 
-  <!-- Column 3: Security & Other Audit Details -->
   <rect x="804" y="226" width="362" height="360" rx="12" fill="#14110a" stroke="#f59e0b" stroke-width="1.8"/>
   <rect x="804" y="226" width="362" height="42" rx="12" fill="#332308"/>
   <text x="985" y="252" text-anchor="middle" fill="#fbbf24" font-family="monospace" font-size="14" font-weight="bold">3. SECURITY &amp; AUDIT DETAILS</text>
   ${renderRows(auditList, 820, 296, "#fde68a")}
 
-  <!-- Footer Branding -->
   <rect x="34" y="604" width="1132" height="44" rx="8" fill="#091318" stroke="#1e293b" stroke-width="1"/>
   <text x="54" y="631" fill="#10b981" font-family="monospace" font-size="13" font-weight="bold">Powered By ${escapeXml(BRANDING.developer)} || Owner ${escapeXml(BRANDING.owner)}</text>
   <text x="1146" y="631" text-anchor="end" fill="#94a3b8" font-family="monospace" font-size="12">${escapeXml(BRANDING.website)}</text>
@@ -338,7 +321,6 @@ function generateFlowchartSvg(report) {
 }
 
 export default async function handler(req, res) {
-  // Open CORS for developers & web frontends
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -347,143 +329,141 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  const rawUrl = req.query.url;
-  const mode = (req.query.mode || "json").toLowerCase();
-
-  if (!rawUrl) {
-    return res.status(200).json({
-      status: "online",
-      api: "JS Secret, Route & Architecture Auditor API",
-      usage: {
-        json_audit: "/api/audit?url=https://example.com",
-        flowchart_visual: "/api/audit?url=https://example.com&mode=flowchart"
-      },
-      features: [
-        "Separate Frontend Full URLs & Backend API Endpoints (Internal + External)",
-        "Parallel JS Bundle Scanner with Safe Masked Secret Detection",
-        "Production Source Map (.js.map) Exposure Verification",
-        "Security Headers & Remediation Grade (A+ to F)",
-        "Auto-Generated Visual Architecture Flowchart"
-      ],
-      branding: BRANDING
-    });
-  }
-
-  let parsedTarget;
   try {
-    parsedTarget = normalizeTargetUrl(rawUrl);
-  } catch (err) {
-    return res.status(400).json({
-      status: "error",
-      message: err.message,
+    const parsedRequestUrl = new URL(req.url || "/", "http://localhost");
+    const rawUrl = parsedRequestUrl.searchParams.get("url") || req.query?.url;
+    const mode = (parsedRequestUrl.searchParams.get("mode") || req.query?.mode || "json").toLowerCase();
+
+    if (!rawUrl) {
+      return res.status(200).json({
+        status: "online",
+        api: "JS Secret, Route & Architecture Auditor API",
+        usage: {
+          json_audit: "/api/audit?url=https://example.com",
+          flowchart_visual: "/api/audit?url=https://example.com&mode=flowchart"
+        },
+        branding: BRANDING
+      });
+    }
+
+    let parsedTarget;
+    try {
+      parsedTarget = normalizeTargetUrl(rawUrl);
+    } catch (err) {
+      return res.status(400).json({
+        status: "error",
+        message: err.message,
+        branding: BRANDING
+      });
+    }
+
+    const startTime = Date.now();
+    const pageRes = await fetchWithTimeout(parsedTarget.href, 7000);
+
+    if (!pageRes.ok || !pageRes.text) {
+      return res.status(502).json({
+        status: "error",
+        message: "Unable to fetch target website (site unreachable, blocked, or timed out).",
+        http_status: pageRes.status,
+        branding: BRANDING
+      });
+    }
+
+    const finalTargetUrl = pageRes.finalUrl || parsedTarget.href;
+    const baseOrigin = new URL(finalTargetUrl).origin;
+
+    const state = {
+      frontendRoutes: new Set(),
+      internalApis: new Set(),
+      externalApis: new Set(),
+      secrets: [],
+      seenSecrets: new Set(),
+      candidateSourceMaps: new Set()
+    };
+
+    const inlineJs = extractInlineScripts(pageRes.text);
+    analyzeContent(pageRes.text, baseOrigin, "index.html", state);
+    if (inlineJs) {
+      analyzeContent(inlineJs, baseOrigin, "inline-script", state);
+    }
+
+    const scriptUrls = extractScriptUrls(pageRes.text, finalTargetUrl).slice(0, 8);
+    const jsResults = await Promise.allSettled(
+      scriptUrls.map(async (jsUrl) => {
+        const fileName = new URL(jsUrl).pathname.split("/").pop() || "bundle.js";
+        const jsRes = await fetchWithTimeout(jsUrl, 5000);
+        if (jsRes.ok && jsRes.text) {
+          analyzeContent(jsRes.text, baseOrigin, fileName, state);
+          return true;
+        }
+        return false;
+      })
+    );
+
+    const scannedJsCount = jsResults.filter((r) => r.status === "fulfilled" && r.value).length;
+
+    const exposedMaps = [];
+    const mapsToVerify = Array.from(state.candidateSourceMaps).slice(0, 3);
+    await Promise.allSettled(
+      mapsToVerify.map(async (mapUrl) => {
+        const mapRes = await fetchWithTimeout(mapUrl, 3500);
+        if (mapRes.ok && mapRes.text && mapRes.text.includes('"mappings"')) {
+          exposedMaps.push(mapUrl);
+        }
+      })
+    );
+
+    const securityHeaders = {
+      has_csp: Boolean(pageRes.headers?.get("content-security-policy")),
+      has_hsts: Boolean(pageRes.headers?.get("strict-transport-security")),
+      has_x_frame: Boolean(pageRes.headers?.get("x-frame-options")),
+      server: pageRes.headers?.get("server") || "hidden"
+    };
+
+    const report = {
+      status: "success",
+      target: finalTargetUrl,
+      scan_time_ms: Date.now() - startTime,
+      scanned_js_files: scannedJsCount,
+      scanned_bundles: scriptUrls,
+      frontend_routes: Array.from(state.frontendRoutes).sort(),
+      backend_apis: {
+        internal: Array.from(state.internalApis).sort(),
+        external: Array.from(state.externalApis).sort()
+      },
+      secret_audit: state.secrets,
+      source_maps: {
+        exposed: exposedMaps.length > 0,
+        exposed_files: exposedMaps
+      },
+      security_headers: securityHeaders,
+      security_summary: null,
+      flowchart_url: null,
       branding: BRANDING
-    });
-  }
+    };
 
-  const startTime = Date.now();
-  const pageRes = await fetchWithTimeout(parsedTarget.href, 7000);
+    report.security_summary = calculateSecuritySummary(report);
 
-  if (!pageRes.ok || !pageRes.text) {
-    return res.status(502).json({
-      status: "error",
-      message: "Unable to fetch target website (site unreachable, blocked, or timed out).",
-      http_status: pageRes.status,
-      branding: BRANDING
-    });
-  }
+    const hostHeader = req.headers["x-forwarded-host"] || req.headers.host;
+    const proto = req.headers["x-forwarded-proto"] || "https";
+    if (hostHeader) {
+      report.flowchart_url = `${proto}://${hostHeader}/api/audit?url=${encodeURIComponent(finalTargetUrl)}&mode=flowchart`;
+    }
 
-  const finalTargetUrl = pageRes.finalUrl || parsedTarget.href;
-  const baseOrigin = new URL(finalTargetUrl).origin;
+    if (mode === "flowchart") {
+      const svg = generateFlowchartSvg(report);
+      res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+      res.setHeader("Cache-Control", "s-maxage=120, stale-while-revalidate");
+      return res.status(200).send(svg);
+    }
 
-  const state = {
-    frontendRoutes: new Set(),
-    internalApis: new Set(),
-    externalApis: new Set(),
-    secrets: [],
-    seenSecrets: new Set(),
-    candidateSourceMaps: new Set()
-  };
-
-  // Analyze main HTML & inline scripts
-  const inlineJs = extractInlineScripts(pageRes.text);
-  analyzeContent(pageRes.text, baseOrigin, "index.html", state);
-  if (inlineJs) {
-    analyzeContent(inlineJs, baseOrigin, "inline-script", state);
-  }
-
-  // Extract & scan up to 8 external JS bundles in parallel (Vercel speed-safe)
-  const scriptUrls = extractScriptUrls(pageRes.text, finalTargetUrl).slice(0, 8);
-  const jsResults = await Promise.allSettled(
-    scriptUrls.map(async (jsUrl) => {
-      const fileName = new URL(jsUrl).pathname.split("/").pop() || "bundle.js";
-      const jsRes = await fetchWithTimeout(jsUrl, 5000);
-      if (jsRes.ok && jsRes.text) {
-        analyzeContent(jsRes.text, baseOrigin, fileName, state);
-        return true;
-      }
-      return false;
-    })
-  );
-
-  const scannedJsCount = jsResults.filter((r) => r.status === "fulfilled" && r.value).length;
-
-  // Check if detected .js.map files are publicly accessible (up to 3 checks)
-  const exposedMaps = [];
-  const mapsToVerify = Array.from(state.candidateSourceMaps).slice(0, 3);
-  await Promise.allSettled(
-    mapsToVerify.map(async (mapUrl) => {
-      const mapRes = await fetchWithTimeout(mapUrl, 3500);
-      if (mapRes.ok && mapRes.text && mapRes.text.includes('"mappings"')) {
-        exposedMaps.push(mapUrl);
-      }
-    })
-  );
-
-  const securityHeaders = {
-    has_csp: Boolean(pageRes.headers?.get("content-security-policy")),
-    has_hsts: Boolean(pageRes.headers?.get("strict-transport-security")),
-    has_x_frame: Boolean(pageRes.headers?.get("x-frame-options")),
-    server: pageRes.headers?.get("server") || "hidden"
-  };
-
-  const report = {
-    status: "success",
-    target: finalTargetUrl,
-    scan_time_ms: Date.now() - startTime,
-    scanned_js_files: scannedJsCount,
-    scanned_bundles: scriptUrls,
-    frontend_routes: Array.from(state.frontendRoutes).sort(),
-    backend_apis: {
-      internal: Array.from(state.internalApis).sort(),
-      external: Array.from(state.externalApis).sort()
-    },
-    secret_audit: state.secrets,
-    source_maps: {
-      exposed: exposedMaps.length > 0,
-      exposed_files: exposedMaps
-    },
-    security_headers: securityHeaders,
-    security_summary: null,
-    flowchart_url: null,
-    branding: BRANDING
-  };
-
-  report.security_summary = calculateSecuritySummary(report);
-
-  const hostHeader = req.headers["x-forwarded-host"] || req.headers.host;
-  const proto = req.headers["x-forwarded-proto"] || "https";
-  if (hostHeader) {
-    report.flowchart_url = `${proto}://${hostHeader}/api/audit?url=${encodeURIComponent(finalTargetUrl)}&mode=flowchart`;
-  }
-
-  // Return Visual Flowchart SVG if mode=flowchart
-  if (mode === "flowchart") {
-    const svg = generateFlowchartSvg(report);
-    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
     res.setHeader("Cache-Control", "s-maxage=120, stale-while-revalidate");
-    return res.status(200).send(svg);
+    return res.status(200).json(report);
+  } catch (err) {
+    return res.status(500).json({
+      status: "error",
+      message: err?.message || "Unexpected runtime error inside /api/audit",
+      branding: BRANDING
+    });
   }
-
-  res.setHeader("Cache-Control", "s-maxage=120, stale-while-revalidate");
-  return res.status(200).json(report);
-  }
+}

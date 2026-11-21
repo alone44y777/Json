@@ -1,0 +1,10 @@
+{
+  "name": "nexgen-js-security-auditor-api",
+  "version": "1.0.0",
+  "description": "Frontend JS Bundle Secret, Route & Architecture Flowchart Auditor API",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {}
+}

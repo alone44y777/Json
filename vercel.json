@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/api/audit"
+    }
+  ],
+  "functions": {
+    "api/audit.js": {
+      "maxDuration": 15,
+      "memory": 512
+    }
+  }
+}
